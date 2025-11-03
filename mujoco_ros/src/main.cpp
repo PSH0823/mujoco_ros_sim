@@ -9,6 +9,7 @@
 
 #include "mjros.h"
 #include "mujoco_rgbd_camera.hpp"
+
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <cv_bridge/cv_bridge.h>
@@ -158,9 +159,9 @@ void loadmodel(void)
 void RGBD_sensor(mjModel* model, mjData* data)
 {
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  GLFWwindow* window = glfwCreateWindow(640, 480, "Camera", NULL, NULL);
+  GLFWwindow* cam_window = glfwCreateWindow(1280, 720, "Camera", NULL, NULL);
   // glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_FALSE);
-  glfwMakeContextCurrent(window);
+  glfwMakeContextCurrent(cam_window);
   glfwSwapInterval(1);
 
   // setup camera
@@ -185,12 +186,12 @@ void RGBD_sensor(mjModel* model, mjData* data)
 
   RGBD_mujoco mj_RGBD;
 
-  while (!glfwWindowShouldClose(window))
+  while (!glfwWindowShouldClose(cam_window))
   {
     ros::Time init_ = ros::Time::now();
     // get framebuffer viewport
     mjrRect viewport = {0,0,0,0};
-    glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
+    glfwGetFramebufferSize(cam_window, &viewport.width, &viewport.height);
     
     mj_RGBD.set_camera_intrinsics(model, rgbd_camera, viewport);
 
@@ -215,7 +216,7 @@ void RGBD_sensor(mjModel* model, mjData* data)
     {
         ////CAMERA img publish
         // cv::Mat resized_img;
-        // cv::Size desired_size(480, 640); // 원하는 크기 지정하세요 FOV는 .xml에서..
+        // cv::Size desired_size(1280, 720); // 원하는 크기 지정하세요 FOV는 .xml에서..
         // cv::resize(pub_img, resized_img, desired_size);
         // img_msg = cv_bridge::CvImage(std_msgs::Header(), "rgb8", resized_img).toImageMsg();
         img_msg = cv_bridge::CvImage(std_msgs::Header(), "rgb8", pub_img).toImageMsg();
@@ -228,34 +229,34 @@ void RGBD_sensor(mjModel* model, mjData* data)
     }
 
     ////OBJ POSE
-    body_id = -1;
-    body_id = mj_name2id(model, mjOBJ_BODY, "obj");
+    // body_id = -1;
+    // body_id = mj_name2id(model, mjOBJ_BODY, "obj");
 
 
-    if (body_id >= 0)
-    {
-        geomIndex = model->body_geomadr[body_id];
+    // if (body_id >= 0)
+    // {
+    //     geomIndex = model->body_geomadr[body_id];
 
-        obj_pose_msg_.position.x = data->geom_xpos[3*geomIndex];
-        obj_pose_msg_.position.y = data->geom_xpos[3*geomIndex + 1];
-        obj_pose_msg_.position.z = data->geom_xpos[3*geomIndex + 2];
+    //     obj_pose_msg_.position.x = data->geom_xpos[3*geomIndex];
+    //     obj_pose_msg_.position.y = data->geom_xpos[3*geomIndex + 1];
+    //     obj_pose_msg_.position.z = data->geom_xpos[3*geomIndex + 2];
 
-        double rot_vec[9];  // column vectors
-        for(int i = 0; i < 9; i++){
-            rot_vec[i] = data->geom_xmat[9*geomIndex + i];
-        }
-        Eigen::Map<Eigen::Matrix3d> rotationMatrix(rot_vec);
-        Eigen::Quaterniond quaternion(rotationMatrix.transpose());  // eigen uses row vectors, so transpose
-        obj_pose_msg_.orientation.x = quaternion.coeffs()[0];
-        obj_pose_msg_.orientation.y = quaternion.coeffs()[1];
-        obj_pose_msg_.orientation.z = quaternion.coeffs()[2];
-        obj_pose_msg_.orientation.w = quaternion.coeffs()[3];
-    }
-    else
-    {
-        ROS_WARN("NO OBJ POS");
-    }
-    obj_pose_pub.publish(obj_pose_msg_);
+    //     double rot_vec[9];  // column vectors
+    //     for(int i = 0; i < 9; i++){
+    //         rot_vec[i] = data->geom_xmat[9*geomIndex + i];
+    //     }
+    //     Eigen::Map<Eigen::Matrix3d> rotationMatrix(rot_vec);
+    //     Eigen::Quaterniond quaternion(rotationMatrix.transpose());  // eigen uses row vectors, so transpose
+    //     obj_pose_msg_.orientation.x = quaternion.coeffs()[0];
+    //     obj_pose_msg_.orientation.y = quaternion.coeffs()[1];
+    //     obj_pose_msg_.orientation.z = quaternion.coeffs()[2];
+    //     obj_pose_msg_.orientation.w = quaternion.coeffs()[3];
+    // }
+    // else
+    // {
+    //     ROS_WARN("NO OBJ POS");
+    // }
+    // obj_pose_pub.publish(obj_pose_msg_);
 
     mtx.unlock();
 
@@ -268,7 +269,7 @@ void RGBD_sensor(mjModel* model, mjData* data)
     mtx.unlock();
 
     // Swap OpenGL buffers
-    glfwSwapBuffers(window);
+    glfwSwapBuffers(cam_window);
 
     // process pending GUI events, call GLFW callbacks
     glfwPollEvents();
@@ -280,6 +281,9 @@ void RGBD_sensor(mjModel* model, mjData* data)
     // Do not forget to release buffer to avoid memory leak
     mj_RGBD.release_buffer();
   }
+
+  // Destroy GLFW window to close camera window properly
+  glfwDestroyWindow(cam_window);
 
   mjv_freeScene(&sensor_scene);
   mjr_freeContext(&sensor_context);
@@ -366,6 +370,10 @@ int main(int argc, char **argv)
     sim_command_sub = nh.subscribe<std_msgs::String>("/mujoco_ros_interface/sim_command_con2sim", 100, sim_command_callback);
     sim_command_pub = nh.advertise<std_msgs::String>("/mujoco_ros_interface/sim_command_sim2con", 1);
 
+    force_apply_sub = nh.subscribe("/tocabi_avatar/applied_ext_force", 10, &force_apply_callback);
+
+    aruco_pose_sub = nh.subscribe("/tocabi_cc/aruco_pose", 10, QRPoseCallback);
+
     image_transport::ImageTransport it(nh);
     camera_image_pub = it.advertise("/mujoco_ros_interface/camera/image", 1);
     depth_image_pub = it.advertise("/mujoco_ros_interface/camera/depth", 1);
@@ -374,8 +382,8 @@ int main(int argc, char **argv)
     std::string actionServerName = "/imageRequestAction";
     ImageRequestAction action(actionServerName);
 
-    obj_pose_pub = nh.advertise<geometry_msgs::Pose>("/obj_pose", 1);
-    new_obj_pose_sub = nh.subscribe<geometry_msgs::Pose>("/new_obj_pose", 1, NewObjPoseCallback);
+    // obj_pose_pub = nh.advertise<geometry_msgs::Pose>("/obj_pose", 1);
+    // new_obj_pose_sub = nh.subscribe<geometry_msgs::Pose>("/new_obj_pose", 1, NewObjPoseCallback);
 
     if (!use_shm)
     {
@@ -463,9 +471,8 @@ int main(int argc, char **argv)
         {
             ROS_INFO("Load Request");
             loadmodel();
+            // Uncomment this line if using the camera
             visual_thread = std::thread(RGBD_sensor, m, d);
-            //TODO
-            // visual_thread2 = std::thread(RGBD_sensor, m, d, "camera2");
         }
         else if (settings.loadrequest > 1)
             settings.loadrequest = 1;
@@ -485,6 +492,8 @@ int main(int argc, char **argv)
         // render while simulation is running
         render(window);
     }
+    
+    glfwDestroyWindow(window);
 
     // stop simulation thread
     settings.exitrequest = 1;

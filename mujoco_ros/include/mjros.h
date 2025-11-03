@@ -19,9 +19,11 @@
 #include <mujoco_ros_msgs/SensorState.h>
 #include <mujoco_ros_msgs/JointSet.h>
 #include <mujoco_ros_msgs/SimStatus.h>
+#include <mujoco_ros_msgs/applyforce.h>
 
 #include <std_msgs/String.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/Float32MultiArray.h>
 #include <sensor_msgs/JointState.h>
 #include <tf/transform_datatypes.h>
 #include <geometry_msgs/Point.h>
@@ -293,6 +295,23 @@ ros::Publisher sim_command_pub;
 ros::Publisher sim_status_pub;
 ros::Subscriber new_obj_pose_sub;
 // ros::Publisher obj_pose_pub;
+ros::Subscriber force_apply_sub;    // apply external force
+ros::Subscriber aruco_pose_sub;     // move a QR code(ArUCo) attached obstacle
+
+// std_msgs::Float32MultiArray ext_force_msg_;
+mujoco_ros_msgs::applyforce ext_force_msg_;
+bool ext_force_applied_ = false;
+std::vector<float> applied_ext_force_;
+unsigned int force_appiedd_link_idx_;
+mjvGeom* arrow;
+void arrowshow(mjvGeom* arrow);
+void makeArrow(mjvGeom* arrow);
+
+//QR(aruco) box related variables
+const int mocap_aruco_id = 0;
+double pos_aruco_desired[3];
+double quat_aruco_desired[4];
+bool aruco_pos_cmd_applied = false;
 
 //mujoco_ros_msgs::JointState joint_state_msg_;
 //mujoco_ros_msgs::JointSet joint_set_msg_;
@@ -370,5 +389,7 @@ void state_publisher();
 void mujoco_ros_connector_init();
 void mycontroller(const mjModel *m, mjData *d);
 void NewObjPoseCallback(const geometry_msgs::PoseConstPtr &msg);
+void force_apply_callback(const std_msgs::Float32MultiArray &msg);
+void QRPoseCallback(const geometry_msgs::PoseStamped & msg);            // get the desired pos.&ori. of a QR code(ArUCo) attached obstacle
 
 #endif
